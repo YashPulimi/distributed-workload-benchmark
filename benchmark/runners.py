@@ -25,13 +25,17 @@ def _run(cmd, cwd=None):
     return elapsed, proc.stdout
 
 
-def run_pandas(query: str, local_input: str) -> float:
+def run_pandas(query: str, local_input: str, local_zones: str = None) -> float:
     script = PROJECT_ROOT / "queries" / "baseline_pandas" / f"{query}.py"
-    elapsed, _ = _run(["python", str(script), "--input", local_input])
+    cmd = ["python", str(script), "--input", local_input]
+    if local_zones:
+        cmd += ["--zones", local_zones]
+    elapsed, _ = _run(cmd)
     return elapsed
 
 
-def run_spark(query: str, hdfs_input: str, driver_memory="512m", executor_memory="512m") -> float:
+def run_spark(query: str, hdfs_input: str, hdfs_zones: str = None,
+              driver_memory="512m", executor_memory="512m") -> float:
     script_in_container = f"/workspace/queries/spark/{query}.py"
     cmd = [
         "docker", "exec", "bench-spark-master",
@@ -41,21 +45,28 @@ def run_spark(query: str, hdfs_input: str, driver_memory="512m", executor_memory
         "--executor-memory", executor_memory,
         script_in_container, "--input", hdfs_input,
     ]
+    if hdfs_zones:
+        cmd += ["--zones", hdfs_zones]
     elapsed, _ = _run(cmd)
     return elapsed
 
 
-def run_hadoop_mapreduce(query: str, hdfs_input: str, hdfs_output: str) -> float:
+def run_hadoop_mapreduce(query: str, hdfs_input: str, hdfs_output: str,
+                          local_zones: str = None) -> float:
     mapper = f"/workspace/queries/hadoop_mapreduce/{query}/mapper.py"
     reducer = f"/workspace/queries/hadoop_mapreduce/{query}/reducer.py"
     streaming_jar = "/opt/hadoop-3.2.1/share/hadoop/tools/lib/hadoop-streaming-3.2.1.jar"
 
     _run(["docker", "exec", "bench-resourcemanager", "hdfs", "dfs", "-rm", "-r", "-f", hdfs_output])
 
+    files_arg = f"{mapper},{reducer}"
+    if local_zones:
+        files_arg += f",{local_zones}#zones.csv"
+
     cmd = [
         "docker", "exec", "bench-resourcemanager",
         "hadoop", "jar", streaming_jar,
-        "-files", f"{mapper},{reducer}",
+        "-files", files_arg,
         "-mapper", "python3 mapper.py",
         "-reducer", "python3 reducer.py",
         "-input", hdfs_input,

@@ -15,10 +15,16 @@ from benchmark import runners, storage
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOCAL_INPUT = PROJECT_ROOT / "data" / "raw" / "trips_2024-01.csv"
+LOCAL_ZONES = PROJECT_ROOT / "data" / "raw" / "taxi_zone_lookup.csv"
 HDFS_INPUT = "hdfs://namenode:9000/benchmark/input/trips.csv"
+HDFS_ZONES = "hdfs://namenode:9000/benchmark/input/zones.csv"
 HDFS_OUTPUT_PREFIX = "/benchmark/output"
+# path as seen from inside the resourcemanager container (workspace bind mount),
+# used for hadoop streaming's -files distributed-cache argument
+CONTAINER_ZONES = "/workspace/data/raw/taxi_zone_lookup.csv"
 
 ENGINES = ["pandas", "spark", "hadoop_mapreduce"]
+QUERIES_NEEDING_ZONES = {"top_zones"}
 
 
 def _data_stats():
@@ -32,12 +38,21 @@ def run_one(engine: str, query: str):
     size_mb, row_count = _data_stats()
     print(f"[{engine}] running '{query}' ({row_count:,} rows, {size_mb:.1f} MB)...")
 
+    needs_zones = query in QUERIES_NEEDING_ZONES
+
     if engine == "pandas":
-        elapsed = runners.run_pandas(query, str(LOCAL_INPUT))
+        elapsed = runners.run_pandas(
+            query, str(LOCAL_INPUT), str(LOCAL_ZONES) if needs_zones else None
+        )
     elif engine == "spark":
-        elapsed = runners.run_spark(query, HDFS_INPUT)
+        elapsed = runners.run_spark(
+            query, HDFS_INPUT, HDFS_ZONES if needs_zones else None
+        )
     elif engine == "hadoop_mapreduce":
-        elapsed = runners.run_hadoop_mapreduce(query, HDFS_INPUT, f"{HDFS_OUTPUT_PREFIX}/{query}")
+        elapsed = runners.run_hadoop_mapreduce(
+            query, HDFS_INPUT, f"{HDFS_OUTPUT_PREFIX}/{query}",
+            CONTAINER_ZONES if needs_zones else None
+        )
     else:
         raise ValueError(f"Unknown engine: {engine}")
 
