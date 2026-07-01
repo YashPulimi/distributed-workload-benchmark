@@ -15,10 +15,6 @@ data/raw/
 data/*.csv
 data/*.parquet
 
-# generated benchmark outputs (kept small samples committed separately if needed)
-results/*.csv
-results/plots/*.png
-
 # spark/hadoop local scratch
 *.log
 spark-warehouse/
