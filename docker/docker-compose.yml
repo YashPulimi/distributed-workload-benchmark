@@ -1,0 +1,113 @@
+x-hadoop-env: &hadoop-env
+  CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+  CORE_CONF_hadoop_http_staticuser_user: root
+  HDFS_CONF_dfs_replication: "1"
+  HDFS_CONF_dfs_webhdfs_enabled: "true"
+  YARN_CONF_yarn_resourcemanager_hostname: resourcemanager
+  YARN_CONF_yarn_nodemanager_resource_memory___mb: "512"
+  YARN_CONF_yarn_scheduler_maximum___allocation___mb: "512"
+  YARN_CONF_yarn_scheduler_minimum___allocation___mb: "128"
+  YARN_CONF_yarn_nodemanager_vmem___check___enabled: "false"
+  YARN_CONF_yarn_nodemanager_pmem___check___enabled: "false"
+  MAPRED_CONF_mapreduce_framework_name: yarn
+  MAPRED_CONF_mapreduce_map_memory_mb: "256"
+  MAPRED_CONF_mapreduce_reduce_memory_mb: "256"
+  MAPRED_CONF_mapreduce_map_java_opts: "-Xmx200m"
+  MAPRED_CONF_mapreduce_reduce_java_opts: "-Xmx200m"
+  MAPRED_CONF_yarn_app_mapreduce_am_resource_mb: "256"
+
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: bench-namenode
+    hostname: namenode
+    environment:
+      <<: *hadoop-env
+      CLUSTER_NAME: bench-cluster
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    volumes:
+      - namenode-data:/hadoop/dfs/name
+    mem_limit: 512m
+    networks: [bench-net]
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: bench-datanode
+    hostname: datanode
+    depends_on: [namenode]
+    environment:
+      <<: *hadoop-env
+      SERVICE_PRECONDITION: "namenode:9870"
+    volumes:
+      - datanode-data:/hadoop/dfs/data
+    mem_limit: 512m
+    networks: [bench-net]
+
+  resourcemanager:
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+    container_name: bench-resourcemanager
+    hostname: resourcemanager
+    depends_on: [namenode, datanode]
+    environment:
+      <<: *hadoop-env
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864"
+    ports:
+      - "8088:8088"
+    mem_limit: 512m
+    networks: [bench-net]
+
+  nodemanager:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: bench-nodemanager
+    hostname: nodemanager
+    depends_on: [resourcemanager]
+    environment:
+      <<: *hadoop-env
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 resourcemanager:8088"
+    ports:
+      - "8042:8042"
+    mem_limit: 768m
+    networks: [bench-net]
+
+  spark-master:
+    image: bitnamilegacy/spark:3.3
+    container_name: bench-spark-master
+    hostname: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_DAEMON_MEMORY=256m
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    mem_limit: 320m
+    networks: [bench-net]
+
+  spark-worker:
+    image: bitnamilegacy/spark:3.3
+    depends_on: [spark-master]
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=480m
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_DAEMON_MEMORY=128m
+    mem_limit: 512m
+    networks: [bench-net]
+
+networks:
+  bench-net:
+    driver: bridge
+
+volumes:
+  namenode-data:
+  datanode-data:

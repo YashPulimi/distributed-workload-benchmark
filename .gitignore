@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+env/
+.env
+*.egg-info/
+.DS_Store
+.idea/
+.vscode/
+
+# raw datasets - too large for git, downloaded via data/download_dataset.py
+data/raw/
+data/*.csv
+data/*.parquet
+
+# generated benchmark outputs (kept small samples committed separately if needed)
+results/*.csv
+results/plots/*.png
+
+# spark/hadoop local scratch
+*.log
+spark-warehouse/
+metastore_db/
